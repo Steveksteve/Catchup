@@ -1,2 +1,7 @@
 node_modules/
 logs/
+<<<<<<< HEAD
+=======
+.env
+.DS_Store
+>>>>>>> 9a69bfe (Ignore node_modules, logs et fichiers locaux)
