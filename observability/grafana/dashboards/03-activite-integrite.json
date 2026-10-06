@@ -1,0 +1,1230 @@
+{
+  "uid": "gt-game-integrity",
+  "title": "3. Activité de jeu et intégrité des parties",
+  "description": "Quelqu'un abuse-t-il du jeu ? Volume et durée des parties, quarantaines, rapports falsifiés.",
+  "tags": [
+    "game-telemetry"
+  ],
+  "timezone": "Europe/Paris",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "2026-09-19T22:00:00.000Z",
+    "to": "2026-09-26T22:30:00.000Z"
+  },
+  "refresh": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Combien de parties terminées sur la période ?",
+      "description": "Événements game_completed hors doublons.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json dup=\"cls.duplicate\" | dup!=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Combien de parties durent moins de 200 secondes ?",
+      "description": "Une partie normale dure 5 à 14 minutes. En dessous de 200 s : abandon, événement de carte ou farming.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json short=\"cls.short\", dup=\"cls.duplicate\" | dup!=\"true\" | short=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Combien de parties mises en quarantaine ?",
+      "description": "server.quarantined = true : la partie a été isolée par l'anti-triche du serveur.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json q=\"server.quarantined\", dup=\"cls.duplicate\" | dup!=\"true\" | q=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Combien de clients envoient des rapports falsifiés ?",
+      "description": "Clients dont au moins un rapport viole un invariant physique (cls.suspect).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(sum by (client) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json client=\"cls.client\", suspect=\"cls.suspect\" | suspect=\"true\" [$__range])))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Quand joue-t-on, et sur quelle carte ?",
+      "description": "Parties terminées par heure et par carte.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (map) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json map=\"server.map\", dup=\"cls.duplicate\" | dup!=\"true\" [$__interval]))",
+          "queryType": "range",
+          "legendFormat": "{{map}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "maxDataPoints": 168
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Quand les parties anormalement courtes se produisent-elles ?",
+      "description": "Parties de moins de 200 s par heure et par carte. Deux rafales sur vault, les nuits du 23 et du 25 entre 1 h et 4 h.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (map) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json map=\"server.map\", short=\"cls.short\", dup=\"cls.duplicate\" | dup!=\"true\" | short=\"true\" [$__interval]))",
+          "queryType": "range",
+          "legendFormat": "{{map}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "maxDataPoints": 168
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Combien de temps dure une partie ?",
+      "description": "Médiane et 5e centile de la durée (fin de partie moins server.createdAt). Le 5e centile s'effondre pendant le farming.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.5, {service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json d=\"cls.durationS\" | unwrap d [$__interval]) by (event)",
+          "queryType": "range",
+          "legendFormat": "médiane"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.05, {service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json d=\"cls.durationS\" | unwrap d [$__interval]) by (event)",
+          "queryType": "range",
+          "legendFormat": "5e centile"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "maxDataPoints": 56
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Les serveurs de jeu tiennent-ils leur cadence de tick ?",
+      "description": "Plus grand écart entre deux ticks sur les parties terminées. Normal : 50 à 53 ms. Alerte au-dessus de 100 ms.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max_over_time({service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json gap=\"server.tickGapMaxMs\" | unwrap gap [$__interval]) by (event)",
+          "queryType": "range",
+          "legendFormat": "écart max entre ticks"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "ms",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "maxDataPoints": 168
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Les scores sont-ils équilibrés sur l'ensemble des parties ?",
+      "description": "Parties par score final (joueurs - bots).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (s0, s1) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json s0=\"server.score[0]\", s1=\"server.score[1]\", dup=\"cls.duplicate\" | dup!=\"true\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "{{s0}} - {{s1}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto"
+      }
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Quel score ont les parties de moins de 200 secondes ?",
+      "description": "Un seul score sur toutes les parties courtes signale un scénario répété, pas du jeu normal.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (map, s0, s1) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json map=\"server.map\", s0=\"server.score[0]\", s1=\"server.score[1]\", short=\"cls.short\", dup=\"cls.duplicate\" | dup!=\"true\" | short=\"true\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "{{map}} : {{s0}} - {{s1}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto"
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Quels clients envoient des rapports physiquement impossibles ?",
+      "description": "Rapports suspects par client.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (client) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json client=\"cls.client\", suspect=\"cls.suspect\", dup=\"cls.duplicate\" | dup!=\"true\" | suspect=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Rapports",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Rapports",
+              "Value #A": "Rapports"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Quels contrôles d'intégrité échouent ?",
+      "description": "negative_duration : durée négative. fps_above_cap : fps > 144. frame_shorter_than_work : image plus courte que son temps de travail. render_sum_mismatch : étape render différente de la somme de ses détails.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 28,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (violations) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json violations=\"cls.violations\", suspect=\"cls.suspect\", dup=\"cls.duplicate\" | dup!=\"true\" | suspect=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Rapports",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Rapports",
+              "Value #A": "Rapports"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Quels clients envoient le plus de rapports ?",
+      "description": "Les 10 clients les plus bavards. Médiane en production : 8 rapports par client sur 7 jours.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 28,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "topk(10, sum by (client) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json client=\"cls.client\", dup=\"cls.duplicate\" | dup!=\"true\" [$__range])))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Rapports",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Rapports",
+              "Value #A": "Rapports"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Combien d'enregistrements en double dans la source ?",
+      "description": "Lignes marquées cls.duplicate : même rapport ou même partie exporté deux fois.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=\"game-telemetry\", source=\"$source\"} | json dup=\"cls.duplicate\" | dup=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 15,
+      "type": "logs",
+      "title": "Quelles parties ont été mises en quarantaine ?",
+      "description": "Une ligne par partie en quarantaine : carte, score, durée.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 36,
+        "w": 18,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service=\"game-telemetry\", source=\"$source\", event=\"game_completed\"} | json | server_quarantined=\"true\" | line_format \"partie={{.server_id}} carte={{.server_map}} duree={{.cls_durationS}}s joueurs={{.server_players}}\"",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      }
+    },
+    {
+      "id": 16,
+      "type": "logs",
+      "title": "À quoi ressemble un rapport falsifié ?",
+      "description": "Rapports suspects : fps annoncé, durée de l'image, temps de travail total, étape render.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 24,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json | cls_suspect=\"true\" | line_format \"client={{.cls_client}} fps={{.report_fps}} image={{.report_frameMs}}ms travail={{.report_work_totalMs}}ms render={{.report_work_stages_render}}ms partie={{.server_id}}\"",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "En direct : métriques Prometheus (indépendantes de la variable Source)",
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "En direct : combien de parties sont en cours, par carte ?",
+      "description": "Jauge game_games_active.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "game_games_active{job=\"game-telemetry\"}",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{map}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "En direct : quelle part des parties dure moins de 2 minutes, par carte ?",
+      "description": "Recording rule map:game_short_games:ratio_rate30m. Alerte ShortGamesFarming au-dessus de 50 %.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 52,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "map:game_short_games:ratio_rate15m",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{map}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "percentunit",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "En direct : les serveurs de jeu tiennent-ils leur cadence de tick ?",
+      "description": "Jauge game_server_tick_gap_max_milliseconds. Alerte ServerTickDegraded au-dessus de 100 ms.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 52,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "game_server_tick_gap_max_milliseconds{job=\"game-telemetry\"}",
+          "instant": false,
+          "range": true,
+          "legendFormat": "écart max entre ticks"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "ms",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "Semaine de l'incident (20 au 26 septembre)",
+      "type": "link",
+      "icon": "dashboard",
+      "url": "/d/gt-game-integrity?var-source=export&from=2026-09-19T22:00:00.000Z&to=2026-09-26T22:30:00.000Z",
+      "targetBlank": false
+    },
+    {
+      "title": "En direct (30 dernieres minutes)",
+      "type": "link",
+      "icon": "bolt",
+      "url": "/d/gt-game-integrity?var-source=live&from=now-30m&to=now&refresh=30s",
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "source",
+        "label": "Source des logs",
+        "type": "custom",
+        "query": "export,live",
+        "options": [
+          {
+            "text": "export (20 au 26 septembre)",
+            "value": "export",
+            "selected": true
+          },
+          {
+            "text": "live (en direct)",
+            "value": "live",
+            "selected": false
+          }
+        ],
+        "current": {
+          "text": "export (20 au 26 septembre)",
+          "value": "export",
+          "selected": true
+        },
+        "multi": false,
+        "includeAll": false,
+        "description": "export = historique importe de la console d'administration ; live = logs du service en cours d'execution."
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  }
+}

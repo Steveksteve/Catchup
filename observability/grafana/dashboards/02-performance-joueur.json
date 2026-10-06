@@ -1,0 +1,1066 @@
+{
+  "uid": "gt-player-perf",
+  "title": "2. Performance côté joueur",
+  "description": "Qui subit des saccades, depuis quand et pourquoi ? Typologie des rapports de performance, par cause, build et matériel.",
+  "tags": [
+    "game-telemetry"
+  ],
+  "timezone": "Europe/Paris",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "2026-09-19T22:00:00.000Z",
+    "to": "2026-09-26T22:30:00.000Z"
+  },
+  "refresh": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Combien de rapports de saccade uniques sur la période ?",
+      "description": "Rapports perf_spike hors doublons (cls.duplicate).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json dup=\"cls.duplicate\" | dup!=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Combien de clients distincts ont signalé une saccade ?",
+      "description": "Le client est extrait de l'identifiant du rapport (P-<client>-<n>). Dimension à forte cardinalité : elle vit dans les logs, pas dans les métriques.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(sum by (client) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json client=\"cls.client\" [$__range])))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Combien de clients à écran large avec bloom ont subi la saccade overlay ?",
+      "description": "Population touchée par la régression : largeur ≥ 2560 px et bloom actif.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(sum by (client) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json client=\"cls.client\", cause=\"cls.cause\", wide=\"cls.wideBloom\" | cause=\"overlay\" | wide=\"true\" [$__range])))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Quelle part des rapports est une saccade overlay ?",
+      "description": "Référence avant le build beta-20260924-3 : moins de 1 %.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json cause=\"cls.cause\", dup=\"cls.duplicate\" | dup!=\"true\" | cause=\"overlay\" [$__range])) / sum(count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json dup=\"cls.duplicate\" | dup!=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Depuis quand les saccades augmentent-elles, et pour quelle cause ?",
+      "description": "Rapports par heure et par cause classée. Les autres causes restent stables ; seule la cause overlay décolle le jeudi 24 au soir.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (cause) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json cause=\"cls.cause\", dup=\"cls.duplicate\" | dup!=\"true\" [$__interval]))",
+          "queryType": "range",
+          "legendFormat": "{{cause}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "maxDataPoints": 168
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Quel build produit les saccades overlay ?",
+      "description": "Rapports overlay par build client. Le premier rapport honnête du build beta-20260924-3 date du jeudi 24 à 19 h 06 ; le premier rapport overlay suit à 20 h 16.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (build) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json build=\"report.build\", cause=\"cls.cause\", dup=\"cls.duplicate\" | dup!=\"true\" | cause=\"overlay\" [$__interval]))",
+          "queryType": "range",
+          "legendFormat": "{{build}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "maxDataPoints": 168
+    },
+    {
+      "id": 7,
+      "type": "bargauge",
+      "title": "Quelle part des rapports de chaque build est une saccade overlay ?",
+      "description": "Moins de 1 % sur les builds 0919-2 et 0922-1, 29 % sur 0924-3, 35 % sur 0926-5 : le correctif n'est pas dans les builds du 26.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (build) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json build=\"report.build\", cause=\"cls.cause\", dup=\"cls.duplicate\" | dup!=\"true\" | cause=\"overlay\" [$__range])) / sum by (build) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json build=\"report.build\", dup=\"cls.duplicate\" | dup!=\"true\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "{{build}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Qui est touché : quelle largeur d'écran, avec ou sans bloom ?",
+      "description": "Rapports overlay par largeur d'affichage et réglage bloom.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (width, bloom) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json width=\"report.graphics.width\", bloom=\"report.graphics.bloom\", cause=\"cls.cause\", dup=\"cls.duplicate\" | dup!=\"true\" | cause=\"overlay\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "{{width}} px, bloom={{bloom}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "La saccade overlay dépend-elle de la carte ?",
+      "description": "Rapports overlay par carte : une répartition homogène écarte une cause liée au contenu d'une carte.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (map) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json map=\"server.map\", cause=\"cls.cause\", dup=\"cls.duplicate\" | dup!=\"true\" | cause=\"overlay\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "{{map}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto"
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Combien de temps dure une image saccadée, par cause (p95) ?",
+      "description": "p95 de report.frameMs. Une image fluide dure 16 ms ; au-delà de 100 ms le joueur perçoit un gel.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.95, {service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json cause=\"cls.cause\", frameMs=\"report.frameMs\" | unwrap frameMs [$__interval]) by (cause)",
+          "queryType": "range",
+          "legendFormat": "{{cause}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "ms",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "maxDataPoints": 56
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Les saccades réseau viennent-elles des serveurs de jeu ?",
+      "description": "Écart maximal entre ticks vu dans les rapports (normal : 50 à 53 ms) et nombre de rapports de cause network.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json gap=\"server.tickGapMaxMs\" | unwrap gap [$__interval]) by (event)",
+          "queryType": "range",
+          "legendFormat": "écart max entre ticks (ms)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json cause=\"cls.cause\" | cause=\"network\" [$__interval]))",
+          "queryType": "range",
+          "legendFormat": "rapports network"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "maxDataPoints": 168
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Quels clients signalent le plus de saccades overlay ?",
+      "description": "Les 15 clients les plus touchés.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "topk(15, sum by (client) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json client=\"cls.client\", cause=\"cls.cause\", dup=\"cls.duplicate\" | dup!=\"true\" | cause=\"overlay\" [$__range])))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Rapports",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Rapports",
+              "Value #A": "Rapports"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Quels rapports arrivent encore à l'ancien schéma ?",
+      "description": "Rapports par version de schéma (v1 : report.rttMs, v2 : report.network.rttMs) et par build.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (schema, build) (count_over_time({service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json schema=\"cls.schema\", build=\"report.build\", dup=\"cls.duplicate\" | dup!=\"true\" [$__range]))",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Rapports",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Rapports",
+              "Value #A": "Rapports"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "logs",
+      "title": "À quoi ressemble un rapport de saccade overlay ?",
+      "description": "Une ligne par rapport : client, build, durée de l'image, temps passé dans l'étape renderOverlay, affichage.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service=\"game-telemetry\", source=\"$source\", event=\"perf_spike\"} | json | cls_cause=\"overlay\" | line_format \"client={{.cls_client}} build={{.report_build}} image={{.report_frameMs}}ms renderOverlay={{.report_work_details_renderOverlay}}ms largeur={{.report_graphics_width}}px bloom={{.report_graphics_bloom}} carte={{.server_map}}\"",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "En direct : métriques Prometheus (indépendantes de la variable Source)",
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "En direct : combien de rapports les parties produisent-elles, par cause ?",
+      "description": "perf_reports_total, source fleet (hors trafic synthétique du générateur de charge).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (cause) (rate(perf_reports_total{job=\"game-telemetry\",source=\"fleet\"}[5m]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{cause}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "En direct : quelle part des rapports de chaque build est une saccade overlay ?",
+      "description": "Recording rule build:perf_reports_overlay:ratio_rate1h. Alerte OverlayRegressionOnBuild au-dessus de 20 %.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 54,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "build:perf_reports_overlay:ratio_rate15m",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{build}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "percentunit",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "Semaine de l'incident (20 au 26 septembre)",
+      "type": "link",
+      "icon": "dashboard",
+      "url": "/d/gt-player-perf?var-source=export&from=2026-09-19T22:00:00.000Z&to=2026-09-26T22:30:00.000Z",
+      "targetBlank": false
+    },
+    {
+      "title": "En direct (30 dernieres minutes)",
+      "type": "link",
+      "icon": "bolt",
+      "url": "/d/gt-player-perf?var-source=live&from=now-30m&to=now&refresh=30s",
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "source",
+        "label": "Source des logs",
+        "type": "custom",
+        "query": "export,live",
+        "options": [
+          {
+            "text": "export (20 au 26 septembre)",
+            "value": "export",
+            "selected": true
+          },
+          {
+            "text": "live (en direct)",
+            "value": "live",
+            "selected": false
+          }
+        ],
+        "current": {
+          "text": "export (20 au 26 septembre)",
+          "value": "export",
+          "selected": true
+        },
+        "multi": false,
+        "includeAll": false,
+        "description": "export = historique importe de la console d'administration ; live = logs du service en cours d'execution."
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  }
+}
