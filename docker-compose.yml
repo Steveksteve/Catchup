@@ -1,0 +1,115 @@
+# Une seule commande : docker compose up -d --build
+# Service, generateur de charge, import de l'export historique et stack d'observabilite.
+name: game-telemetry
+
+services:
+  app:
+    image: ${IMAGE:-game-telemetry:local}
+    build:
+      context: .
+      args:
+        BUILD: ${BUILD:-beta-20260926-6}
+    environment:
+      BUILD: ${BUILD:-beta-20260926-6}
+      GAMES_PER_MINUTE: "20"
+      SPEED: "10"
+    ports:
+      - "8080:8080"
+    volumes:
+      - telemetry-logs:/app/logs
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  loadgen:
+    image: ${IMAGE:-game-telemetry:local}
+    command: ["scripts/loadgen.js", "--url", "http://app:8080", "--rps", "5", "--burst-every", "120", "--burst-rps", "80"]
+    healthcheck:
+      disable: true
+    depends_on:
+      app:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  # Tache ponctuelle : pousse l'export du 20 au 26 septembre dans Loki, puis s'arrete.
+  # Relancee, elle ne reimporte pas (elle verifie d'abord ce que Loki contient deja).
+  export-import:
+    image: ${IMAGE:-game-telemetry:local}
+    command: ["tools/import-export.js", "--file", "/data/admin-export-2026-09-20_26.log", "--loki", "http://loki:3100"]
+    healthcheck:
+      disable: true
+    volumes:
+      - ./data:/data:ro
+    depends_on:
+      - loki
+    read_only: true
+    cap_drop: [ALL]
+    restart: "no"
+
+  loki:
+    image: grafana/loki:3.5.5
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./observability/loki/rules:/etc/loki/rules:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.10.2
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - telemetry-logs:/var/log/game:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "12345:12345"
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: light
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/01-sante-service.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+
+volumes:
+  telemetry-logs:
+  loki-data:
+  alloy-data:
+  prometheus-data:
+  grafana-data:
