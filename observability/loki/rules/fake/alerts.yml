@@ -1,0 +1,44 @@
+# Regles evaluees par le ruler de Loki : tout ce qui demande une dimension a forte
+# cardinalite (client, partie), impossible a porter par un label Prometheus.
+groups:
+  - name: game-telemetry-logs
+    interval: 1m
+    rules:
+      - alert: ClientSendsForgedReports
+        expr: |
+          sum by (client) (
+            count_over_time({service="game-telemetry", source="live", event="perf_spike"}
+              | json client="cls.client", suspect="cls.suspect" | suspect="true" [1h])
+          ) >= 3
+        labels: { severity: warning }
+        annotations:
+          summary: 'Le client {{ $labels.client }} envoie des rapports falsifies.'
+          description: 'Au moins 3 rapports incoherents en une heure. Un rapport isole peut venir d un bug client ; trois, non.'
+
+      - alert: ClientReportFlood
+        expr: |
+          sum by (client) (
+            count_over_time({service="game-telemetry", source="live", event="perf_spike"}
+              | json client="cls.client" [10m])
+          ) > 60
+        labels: { severity: warning }
+        annotations:
+          summary: 'Le client {{ $labels.client }} envoie plus de 60 rapports en 10 minutes.'
+          description: 'Mediane en production : 8 rapports par client sur 7 jours, maximum honnete : 43. Le generateur de charge de la demo (40 clients simules) declenche cette alerte : c est voulu.'
+
+      - alert: OverlaySpikesOnWideScreens
+        expr: |
+          sum(count_over_time({service="game-telemetry", source="live", event="perf_spike"}
+            | json cause="cls.cause", wide="cls.wideBloom", origin="source" | origin!="ingest" | cause="overlay" | wide="true" [1h])) >= 8
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: Saccades overlay sur les ecrans larges avec bloom.
+          description: 'Signature de la regression du build beta-20260924-3 : au plus 1 rapport par jour sur ces ecrans avant, plus de 100 par jour apres.'
+
+      - alert: TelemetryErrorsLogged
+        expr: sum(count_over_time({service="game-telemetry", source="live", level="error"}[5m])) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: Le service journalise des erreurs.

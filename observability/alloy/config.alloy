@@ -1,0 +1,54 @@
+// Collecte des logs en direct : le service ecrit des lignes JSON dans un volume partage,
+// Alloy les suit et les pousse dans Loki.
+
+local.file_match "telemetry" {
+  path_targets = [{
+    __path__ = "/var/log/game/telemetry.log",
+    service  = "game-telemetry",
+    source   = "live",
+  }]
+}
+
+loki.source.file "telemetry" {
+  targets       = local.file_match.telemetry.targets
+  forward_to    = [loki.process.telemetry.receiver]
+  tail_from_end = false
+}
+
+loki.process "telemetry" {
+  forward_to = [loki.write.default.receiver]
+
+  // Seuls trois champs sortent du JSON : l'horodatage et deux labels a valeurs bornees.
+  stage.json {
+    expressions = {
+      ts    = "ts",
+      level = "level",
+      event = "event",
+    }
+  }
+
+  // L'horodatage de l'evenement fait foi, pas l'heure de lecture du fichier.
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339Nano"
+  }
+
+  // event : 6 valeurs, level : 3 valeurs. Tout le reste (client, partie, build, carte,
+  // cause) reste dans la ligne et se filtre a la requete avec "| json".
+  stage.labels {
+    values = {
+      level = "",
+      event = "",
+    }
+  }
+
+  stage.label_drop {
+    values = ["filename"]
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
