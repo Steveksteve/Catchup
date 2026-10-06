@@ -1,0 +1,89 @@
+groups:
+  - name: game-telemetry-service
+    rules:
+      - alert: TelemetryServiceDown
+        expr: up{job="game-telemetry"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: Le service de telemetrie ne repond plus au scraping.
+          description: Aucune metrique depuis 1 minute (4 scrapes manques). Les rapports clients sont perdus pendant la panne.
+
+      - alert: TelemetryHigh5xxRatio
+        expr: job:http_requests_5xx:ratio_rate5m > 0.02
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: Plus de 2 % des requetes echouent cote serveur.
+          description: Le service ne produit aucun 5xx en fonctionnement normal ; les 400 et 422 du generateur de charge sont des erreurs client et ne comptent pas.
+
+      - alert: TelemetryIngestSlow
+        expr: route:http_request_duration_seconds:p95_5m{route="/api/reports"} > 0.25
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: p95 de l'ingestion au-dessus de 250 ms.
+          description: Le traitement d'un rapport est synchrone (environ 6 ms pour 2,5 ko). Au-dela de 250 ms la boucle d'evenements est saturee et les rapports font la queue.
+
+      - alert: TelemetryRejectedReports
+        expr: |
+          sum(rate(perf_reports_rejected_total[10m]))
+          /
+          sum(rate(http_request_duration_seconds_count{route="/api/reports"}[10m])) > 0.10
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: Plus de 10 % des rapports recus sont refuses.
+          description: Le bruit de fond est de 3 % (generateur de charge). Au-dela de 10 %, un client envoie un format incompatible ou sonde l'API.
+
+  - name: game-telemetry-player-performance
+    rules:
+      # Rejouee sur l'export : se declenche le jeudi 24 a 20 h 35, 19 minutes apres le premier
+      # rapport overlay du build 0924-3, et jamais sur les builds precedents.
+      - alert: OverlayRegressionOnBuild
+        expr: |
+          build:perf_reports_overlay:ratio_rate1h > 0.20
+          and
+          sum by (build) (increase(perf_reports_total{source="fleet"}[1h])) >= 10
+        for: 15m
+        labels: { severity: critical }
+        annotations:
+          summary: 'Regression de rendu "overlay" sur le build {{ $labels.build }}.'
+          description: 'Part des rapports overlay sur une heure : {{ $value | humanizePercentage }}. Reference : 0,7 % avant le build beta-20260924-3, 29 % apres.'
+
+      - alert: ServerTickDegraded
+        expr: game_server_tick_gap_max_milliseconds > 100
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Ecart entre ticks serveur au-dessus de 100 ms.
+          description: 'Valeur observee : {{ $value | humanize }} ms. Normal : 50 a 53 ms. Episodes degrades : 368 a 860 ms.'
+
+  - name: game-telemetry-integrity
+    rules:
+      # Rejouee sur l'export : mercredi 23 a 01 h 40 et vendredi 25 a 01 h 10, soit 26 minutes
+      # apres le debut de chaque episode, aucun autre declenchement en 7 jours.
+      - alert: ShortGamesFarming
+        expr: |
+          map:game_short_games:ratio_rate30m > 0.5
+          and
+          sum by (map) (increase(game_duration_seconds_count[30m])) >= 5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Plus de la moitie des parties sur {{ $labels.map }} durent moins de 2 minutes.'
+          description: Une partie normale dure 5 a 14 minutes. Les nuits du 23 et du 25 septembre, 100 % des parties vault duraient 54 a 75 s.
+
+      - alert: QuarantinedGames
+        expr: sum(increase(game_games_completed_total{quarantined="true"}[30m])) >= 3
+        labels: { severity: warning }
+        annotations:
+          summary: Au moins 3 parties mises en quarantaine en 30 minutes.
+          description: La quarantaine est rare (17 sur 779 parties en 7 jours), toutes pendant les deux episodes de farming.
+
+      - alert: ForgedPerfReports
+        expr: sum by (check) (increase(perf_reports_suspect_total[10m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: Des rapports violent un invariant physique.
+          description: Durees negatives, fps au-dessus du plafond de 144, image plus courte que son propre temps de travail. Aucun client honnete n'en produit.

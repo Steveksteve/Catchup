@@ -1,0 +1,39 @@
+groups:
+  - name: game-telemetry-recording
+    interval: 30s
+    rules:
+      # Debit de l'API par route : base de tous les panneaux "R" de RED.
+      - record: route:http_requests:rate5m
+        expr: sum by (route) (rate(http_request_duration_seconds_count{job="game-telemetry"}[5m]))
+
+      # Part des reponses 5xx : numerateur et denominateur pre-agreges, reutilises par l'alerte.
+      - record: job:http_requests_5xx:ratio_rate5m
+        expr: |
+          sum by (job) (rate(http_request_duration_seconds_count{job="game-telemetry",status_code=~"5.."}[5m]))
+          /
+          sum by (job) (rate(http_request_duration_seconds_count{job="game-telemetry"}[5m]))
+
+      # p95 de latence par route : un histogram_quantile couteux, calcule une seule fois.
+      - record: route:http_request_duration_seconds:p95_5m
+        expr: histogram_quantile(0.95, sum by (route, le) (rate(http_request_duration_seconds_bucket{job="game-telemetry"}[5m])))
+
+      # Rapports par build et par cause. source="fleet" : les rapports des parties, pas le trafic
+      # synthetique du generateur de charge (source="ingest"), dont la repartition est arbitraire.
+      - record: build_cause:perf_reports:rate15m
+        expr: sum by (build, cause) (rate(perf_reports_total{job="game-telemetry",source="fleet"}[15m]))
+
+      # Part des rapports "overlay" par build : l'indicateur de la regression du 24 septembre.
+      # Fenetre d'une heure : en production un build recoit 10 a 30 rapports par heure en soiree,
+      # une fenetre plus courte donnerait un ratio calcule sur 2 ou 3 rapports.
+      - record: build:perf_reports_overlay:ratio_rate1h
+        expr: |
+          sum by (build) (rate(perf_reports_total{job="game-telemetry",source="fleet",cause="overlay"}[1h]))
+          /
+          sum by (build) (rate(perf_reports_total{job="game-telemetry",source="fleet"}[1h]))
+
+      # Part des parties de moins de 120 s par carte : l'indicateur de farming.
+      - record: map:game_short_games:ratio_rate30m
+        expr: |
+          sum by (map) (rate(game_duration_seconds_bucket{job="game-telemetry",le="120"}[30m]))
+          /
+          sum by (map) (rate(game_duration_seconds_count{job="game-telemetry"}[30m]))
