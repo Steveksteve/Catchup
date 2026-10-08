@@ -56,6 +56,7 @@
 <p>Le service écrit des lignes JSON dans un volume partagé. Alloy les suit et les pousse dans Loki. Le service expose <code>/metrics</code>, que Prometheus interroge toutes les 15 s. L'export historique est lu par <code>tools/import-export.js</code>, converti au schéma des logs en direct et poussé dans Loki avec son horodatage d'origine. Grafana lit les deux sources ; ses datasources et ses trois tableaux de bord sont provisionnés depuis le dépôt.</p>
 <p>Chaque rapport de saccade passe par <code>src/classify.js</code>, qui lui ajoute un bloc <code>cls</code> : cause, client, contrôles d'intégrité. Le même code sert à l'ingestion en direct, à l'import de l'export et aux métriques : une seule définition de chaque cause dans tout le système.</p>
 
+<figure style="width:62%"><img src="captures/docker-compose-up.png" alt=""><figcaption>Capture 1. <code>docker compose up -d</code> : le service, le générateur de charge, l'import de l'export et la stack d'observabilité démarrent en une commande.</figcaption></figure>
 <h3>Labels Loki et cardinalité</h3>
 <table>
   <tr><th>Label</th><th>Valeurs</th><th>Pourquoi un label</th></tr>
@@ -149,6 +150,7 @@ sum by (event) (count_over_time(E | json dup="cls.duplicate" | dup="true" [8d]))
 <h3>4.2 Dégradation liée à une version : la saccade overlay</h3>
 <figure><img src="figures/fig1-saccades-par-cause.png" alt=""><figcaption>Figure 1. Les autres causes suivent leur cycle journalier habituel. La cause overlay passe de 9 rapports en quatre jours et demi à 114 le vendredi et 124 le samedi.</figcaption></figure>
 <figure><img src="figures/fig2-overlay-par-build.png" alt=""><figcaption>Figure 2. Sur les écrans d'au moins 2 560 px avec bloom, deux rapports en jeu sur trois sont une saccade overlay depuis le build 0924-3. Sur les autres configurations, le taux ne bouge pas.</figcaption></figure>
+<figure><img src="captures/grafana-performance-joueur.png" alt=""><figcaption>Capture 2. Tableau de bord « 2. Performance côté joueur » sur la semaine de l'export. Les barres jaunes (overlay) n'apparaissent qu'à partir du jeudi 24. Le panneau « clients à écran large » compte 40 clients : les 39 touchés après le build et 1 rapport overlay isolé antérieur.</figcaption></figure>
 <ul>
   <li><b>Version.</b> Part des rapports overlay par build : 0,8 % (0919-2), 0,6 % (0922-1), 29 % (0924-3), 35 % (0926-5), 16 % (0926-6, sur 25 rapports seulement).</li>
   <li><b>Population.</b> 248 des 253 rapports overlay des nouveaux builds viennent d'écrans de 2 560, 3 440 ou 3 840 px avec bloom. 39 clients touchés sur les 40 de ce profil vus sur ces builds. Chrome, Firefox, Safari, Edge et Brave sont tous présents, les cinq cartes aussi (39 à 62 rapports chacune) : ni le navigateur ni la carte n'expliquent la saccade.</li>
@@ -171,6 +173,7 @@ sum by (width, bloom) (count_over_time(E | event="perf_spike" | json width="repo
 <pre>sum by (map, s0, s1) (count_over_time(E | event="game_completed" | json map="server.map", s0="server.score[0]", s1="server.score[1]",
   short="cls.short", dup="cls.duplicate" | dup!="true" | short="true" [8d]))   # {map="vault", s0="3", s1="0"} 83</pre>
 
+<figure><img src="captures/grafana-activite-integrite.png" alt=""><figcaption>Capture 3. Tableau de bord « 3. Activité de jeu et intégrité des parties » : 91 parties de moins de 200 s (83 sur vault, 8 sur foundry), 17 quarantaines, 1 client falsificateur. Les deux pics jaunes sont les nuits de farming.</figcaption></figure>
 <h3>4.4 Client suspect et données falsifiées</h3>
 <p>Le client <code>5e1f0c7a</code> envoie 70 rapports du jeudi 24 à 09 h 35 au samedi 26 à 22 h 37. C'est le client le plus bavard de l'export : le suivant en envoie 43, la médiane est de 8.</p>
 <ul>
@@ -206,6 +209,7 @@ sum by (width, bloom) (count_over_time(E | event="perf_spike" | json width="repo
   <tr><td>Service : <code>Down</code>, <code>High5xxRatio</code>, <code>IngestSlow</code>, <code>RejectedReports</code></td><td>Scrape en échec 1 min ; 5xx &gt; 2 % ; p95 d'ingestion &gt; 250 ms ; refus &gt; 10 %</td><td>Le service ne produit aucun 5xx en temps normal ; un rapport se traite en 6 ms environ ; le générateur de charge envoie 3 % de corps invalides.</td><td>Sans objet : l'export ne contient pas le trafic HTTP.</td></tr>
 </table>
 
+<figure><img src="captures/prometheus-alertes.png" alt=""><figcaption>Capture 4. Règles d'alerte chargées dans Prometheus, par groupe. Elles sont inactives sur le trafic en direct au moment de la capture.</figcaption></figure>
 <h3>Faux positifs et faux négatifs</h3>
 <ul>
   <li><b>Régression overlay.</b> Faux négatif : un build peu diffusé n'atteint pas 10 rapports par heure. C'est le cas de 0926-6 (25 rapports en trois heures) : la règle par ratio ne l'aurait pas signalé seule, la règle Loki en nombre absolu compense. Faux positif : avec un seuil à 10 %, la règle se déclenche une fois à tort, le mardi 22 à 00 h 25 sur le build 0919-2 ; à 20 % elle ne le fait plus et ne perd que 3 heures d'alerte sur 20.</li>
