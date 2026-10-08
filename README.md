@@ -74,7 +74,7 @@ Le script pousse deux branches. `demo/failing-test` ajoute un test faux : le job
 ## Image
 
 - Trois étapes : dépendances de production, assemblage, exécution.
-- Base d'exécution `gcr.io/distroless/nodejs22-debian12:nonroot` : ni shell, ni npm, ni gestionnaire de paquets.
+- Base d'exécution `gcr.io/distroless/nodejs22-debian13:nonroot` : ni shell, ni npm, ni gestionnaire de paquets.
 - Utilisateur 65532, système de fichiers en lecture seule dans Compose, toutes les capacités Linux retirées. Seul le volume des logs est inscriptible.
 
 ## Logs
