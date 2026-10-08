@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>UE03 : observabilité et détection de comportements, rapport</title>
+<style>
+  @page { size: A4; margin: 17mm 16mm 17mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", "Helvetica Neue", Arial, sans-serif; font-size: 9.4pt; line-height: 1.42; color: #0b0b0b; margin: 0; }
+  h1 { font-size: 19pt; margin: 0 0 2mm; line-height: 1.2; }
+  h2 { font-size: 13.5pt; margin: 7mm 0 2.5mm; padding-bottom: 1mm; border-bottom: 1px solid #c3c2b7; break-after: avoid; }
+  h3 { font-size: 10.6pt; margin: 4.5mm 0 1.5mm; break-after: avoid; }
+  p { margin: 0 0 2.2mm; }
+  ul, ol { margin: 0 0 2.2mm; padding-left: 5mm; }
+  li { margin-bottom: 0.8mm; }
+  .lead { color: #52514e; font-size: 10pt; margin-bottom: 4mm; }
+  .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin: 3mm 0 2mm; }
+  .answer { border: 1px solid #c3c2b7; border-radius: 2mm; padding: 3mm 3.5mm; }
+  .answer h3 { margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1.5mm 0 3mm; font-size: 8.5pt; }
+  th { text-align: left; font-weight: 600; color: #52514e; border-bottom: 1px solid #898781; padding: 1.2mm 1.5mm; vertical-align: bottom; }
+  td { border-bottom: 1px solid #e1e0d9; padding: 1.2mm 1.5mm; vertical-align: top; }
+  tr { break-inside: avoid; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  code, pre { font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  code { background: #f0efec; padding: 0 0.8mm; border-radius: 0.8mm; }
+  pre { background: #f0efec; padding: 2mm 2.5mm; border-radius: 1.2mm; margin: 1mm 0 2.5mm; white-space: pre-wrap; word-break: break-word; line-height: 1.35; break-inside: avoid; }
+  td pre { margin: 0; padding: 1mm 1.5mm; }
+  figure { margin: 2mm 0 3mm; break-inside: avoid; }
+  figure img { width: 100%; display: block; }
+  figcaption { font-size: 8.2pt; color: #52514e; margin-top: 1mm; }
+  .small { font-size: 8.4pt; color: #52514e; }
+  .pb { break-before: page; }
+</style>
+</head>
+<body>
+
+<h1>Observabilité et détection de comportements sur un jeu multijoueur web</h1>
+<p class="lead">UE03 Données et Analytics. Rapport : qualité des données (B3), métriques et logs (C3), détection de comportements (E), rapport d'incident (F).</p>
+
+<div class="answers">
+  <div class="answer">
+    <h3>« Des joueurs se plaignent de saccades depuis jeudi soir. Pourquoi, et qui est touché ? »</h3>
+    <p>Le build client <code>beta-20260924-3</code>, diffusé le jeudi 24 septembre vers 19 h, a introduit une régression dans l'étape de rendu <code>renderOverlay</code>. Elle passe de 3 ms au plus à 223 à 619 ms et gèle l'image une demi-seconde.</p>
+    <p>Elle ne touche que les joueurs dont l'affichage fait au moins 2 560 px de large avec l'effet bloom activé : 39 des 40 clients de ce profil vus sur les nouveaux builds, tous navigateurs et toutes cartes confondus. Les builds du 26 ne la corrigent pas.</p>
+  </div>
+  <div class="answer">
+    <h3>« Est-ce que quelqu'un abuse du jeu ? »</h3>
+    <p>Oui, de deux façons.</p>
+    <p><b>Farming.</b> Les nuits du 23 et du 25 septembre, 83 parties sur la carte vault durent 54 à 75 s et finissent toutes 3-0. Les seuls rapports émis depuis ces parties viennent de trois clients. Le serveur n'en a mis que 17 en quarantaine.</p>
+    <p><b>Rapports falsifiés.</b> Le client <code>5e1f0c7a</code> envoie 70 rapports physiquement impossibles du 24 au 26, rattachés à 70 parties qui ne se terminent jamais.</p>
+  </div>
+</div>
+
+<h2>1. Architecture</h2>
+<p>Le service écrit des lignes JSON dans un volume partagé. Alloy les suit et les pousse dans Loki. Le service expose <code>/metrics</code>, que Prometheus interroge toutes les 15 s. L'export historique est lu par <code>tools/import-export.js</code>, converti au schéma des logs en direct et poussé dans Loki avec son horodatage d'origine. Grafana lit les deux sources ; ses datasources et ses trois tableaux de bord sont provisionnés depuis le dépôt.</p>
+<p>Chaque rapport de saccade passe par <code>src/classify.js</code>, qui lui ajoute un bloc <code>cls</code> : cause, client, contrôles d'intégrité. Le même code sert à l'ingestion en direct, à l'import de l'export et aux métriques : une seule définition de chaque cause dans tout le système.</p>
+
+<h3>Labels Loki et cardinalité</h3>
+<table>
+  <tr><th>Label</th><th>Valeurs</th><th>Pourquoi un label</th></tr>
+  <tr><td><code>service</code></td><td class="n">1</td><td>Sélecteur de base de toutes les requêtes.</td></tr>
+  <tr><td><code>source</code></td><td class="n">2</td><td><code>live</code> ou <code>export</code> : les deux jeux de données ne se mélangent jamais par accident.</td></tr>
+  <tr><td><code>event</code></td><td class="n">6</td><td>Presque toutes les requêtes filtrent sur un type d'événement ; le label évite de lire les autres flux.</td></tr>
+  <tr><td><code>level</code></td><td class="n">3</td><td>Filtre des erreurs sans parser la ligne.</td></tr>
+</table>
+<p>Soit 7 flux observés : 5 en direct, 2 pour l'export, un de plus si le service journalise une erreur. Le client (231 valeurs en 7 jours, non borné), la partie (851 valeurs), le build et la carte restent dans la ligne : en label, chaque valeur créerait un flux et un chunk à elle seule. Ils se filtrent à la requête avec <code>| json</code>.</p>
+
+<h2>2. Qualité des données de l'export (B3)</h2>
+<p>Fichier <code>data/admin-export-2026-09-20_26.log</code> : 6,07 Mo, 264 344 lignes, 2 944 enregistrements, du 20 septembre 00 h 31 au 27 septembre 00 h 04 (heure de Paris). Tous les chiffres ci-dessous se recalculent avec <code>node tools/quality-report.js</code>. Les requêtes LogQL s'exécutent sur l'export importé ; <code>E</code> abrège <code>{service="game-telemetry", source="export"}</code> et la fenêtre <code>[8d]</code> est évaluée au 27 septembre.</p>
+
+<h3>Pièges de format</h3>
+<table>
+  <tr><th style="width:23%">Constat</th><th style="width:25%">Chiffre</th><th>Preuve</th></tr>
+  <tr><td>Format multi-lignes : en-tête texte, sous-titre, bloc JSON indenté</td><td>2 944 en-têtes pour 264 344 lignes, 0 bloc illisible</td><td><pre>grep -cE '^(Performance spike|Game completed) ' data/*.log
+node tools/import-export.js --dry-run   # parseErrors: 0</pre></td></tr>
+  <tr><td>Horodatage en heure locale américaine sur 12 h, sans fuseau</td><td>882 lignes AM, 2 062 PM ; 4 gabarits de longueur différente</td><td><pre>grep -E '^(Perf|Game)' data/*.log | sed 's/.* · //; s/[0-9]/N/g' | sort | uniq -c</pre></td></tr>
+  <tr><td>Fuseau : heure de Paris (UTC+2)</td><td>2 944 sur 2 944 : l'en-tête lu comme de l'UTC est en avance de 2 h sur <code>createdAt</code> (epoch UTC)</td><td><pre>node tools/quality-report.js
+# timezoneOffsetHoursVsCreatedAt: {"2": 2944}</pre></td></tr>
+  <tr><td>Ordre antichronologique</td><td>2 941 paires consécutives sur 2 943 vont du plus récent au plus ancien</td><td><pre>node tools/quality-report.js   # descendingPairs</pre></td></tr>
+  <tr><td>Deux schémas de rapport</td><td>2 085 rapports v1, 25 rapports v2 (tous du build <code>0926-6</code>) : <code>rttMs</code> passe de <code>report</code> à <code>report.network</code>, une étape <code>physics</code> apparaît</td><td><pre>sum by (schema, build) (count_over_time(E | event="perf_spike"
+  | json schema="cls.schema", build="report.build", dup="cls.duplicate" | dup!="true" [8d]))</pre></td></tr>
+  <tr><td>Les blocs « Game completed » n'ont pas les champs <code>bots*</code> ni le client</td><td>796 sur 796</td><td>Lecture du format : 15 clés, contre 18 dans le bloc <code>server</code> d'un rapport.</td></tr>
+</table>
+<p><b>Traitement.</b> L'importeur découpe sur l'en-tête, convertit l'heure murale en UTC en calculant le décalage de <code>Europe/Paris</code> à l'instant concerné (le changement d'heure est couvert par un test), trie par date croissante parce que Loki refuse les lignes trop en retard dans un flux, et lit <code>rttMs</code> aux deux emplacements.</p>
+
+<h3>Doublons, trous, incohérences</h3>
+<table>
+  <tr><th style="width:23%">Constat</th><th style="width:25%">Chiffre</th><th>Preuve</th></tr>
+  <tr><td>Doublons exacts, exportés deux fois à la suite</td><td>55 enregistrements, 1,9 % : 38 rapports et 17 parties. Restent 2 110 rapports et 779 parties uniques.</td><td><pre>count(sum by (id) (count_over_time(E | event="perf_spike" | json id="report.id" [8d])) > 1)   # 38
+sum by (event) (count_over_time(E | json dup="cls.duplicate" | dup="true" [8d]))</pre></td></tr>
+  <tr><td>Trou de collecte</td><td>Mardi 22, de 13 h 59 à 16 h 14 : 2 h 15 sans aucun enregistrement, en pleine journée. Le plus long silence nocturne est de 1 h 24.</td><td><pre>sum(count_over_time(E [1h]))   # pas de point à 14 h et 15 h le 22</pre></td></tr>
+  <tr><td>Rapports perdus</td><td>26 numéros de séquence manquants sur 2 066 attendus chez les clients honnêtes, 1,3 %</td><td><pre>node tools/quality-report.js   # gaps.sequence</pre></td></tr>
+  <tr><td>Rapports falsifiés</td><td>70 rapports, 3,3 %, un seul client. Les quatre contrôles échouent sur chacun.</td><td><pre>sum by (client) (count_over_time(E | event="perf_spike"
+  | json client="cls.client", suspect="cls.suspect", dup="cls.duplicate"
+  | dup!="true" | suspect="true" [8d]))   # {client="5e1f0c7a"} 70</pre></td></tr>
+  <tr><td><code>createdAt</code> non entier</td><td>71 lignes : les 70 rapports falsifiés et leur doublon. Partout ailleurs, un entier en millisecondes.</td><td><pre>node tools/quality-report.js   # nonIntegerCreatedAt</pre></td></tr>
+  <tr><td>Rapports sans fin de partie</td><td>72 parties citées par des rapports n'ont pas de « Game completed » : les 70 du client falsificateur et 2 parties en cours à la fin de l'export</td><td><pre>node tools/quality-report.js   # spikeServersWithoutCompletedGame</pre></td></tr>
+  <tr><td>Parties sans aucun rapport</td><td>99 parties sur 779. Normal : une partie fluide n'émet rien.</td><td><pre>node tools/quality-report.js   # gamesWithoutSpike</pre></td></tr>
+</table>
+<p><b>Traitement.</b> Les doublons sont conservés et marqués <code>cls.duplicate</code> : ils restent comptables et chaque panneau les exclut. Les rapports falsifiés sont conservés et marqués <code>cls.suspect</code> ; ils sont exclus des statistiques de performance. Loki fusionne deux lignes identiques au même instant : l'importeur ajoute donc à chaque ligne son numéro de ligne d'origine (<code>exportLine</code>).</p>
+<p class="small">Limite : l'en-tête et le JSON sont toujours cohérents entre eux (identifiant de partie, cause, durée, score : 0 écart sur 2 944). L'export ne contient que les fins de partie et les saccades : il ne dit rien des parties abandonnées ni du nombre de joueurs connectés.</p>
+
+<h2 class="pb">3. Métriques (C)</h2>
+<h3>Métriques exposées sur /metrics</h3>
+<table>
+  <tr><th style="width:27%">Métrique</th><th style="width:9%">Type</th><th style="width:19%">Labels</th><th>Justification</th></tr>
+  <tr><td><code>http_request_duration_seconds</code></td><td>Histogramme</td><td>method, route, status_code</td><td>Les trois signaux RED en une métrique : débit (<code>_count</code>), erreurs (code), durée (buckets de 1 ms à 2,5 s). <code>route</code> est le gabarit Express ; une URL inconnue devient <code>unmatched</code>, pour qu'un scanner ne crée pas une série par chemin.</td></tr>
+  <tr><td><code>perf_reports_total</code></td><td>Compteur</td><td>cause, build, source</td><td>Rapports reçus par cause classée et par build. 7 causes, quelques builds actifs, 2 sources. Le build vient du client : il est comparé au motif <code>beta-AAAAMMJJ-N</code>, sinon <code>other</code>.</td></tr>
+  <tr><td><code>perf_report_frame_milliseconds</code></td><td>Histogramme</td><td>cause</td><td>Gravité de la saccade. Buckets de 50 ms à 5 s : sous 50 ms il n'y a pas de rapport, au-delà de 5 s l'onglet était masqué.</td></tr>
+  <tr><td><code>perf_reports_rejected_total</code></td><td>Compteur</td><td>reason</td><td>Rapports refusés : corps invalide ou identifiant invalide. Distingue un client cassé d'un service cassé.</td></tr>
+  <tr><td><code>perf_reports_suspect_total</code></td><td>Compteur</td><td>check</td><td>Rapports qui violent un invariant physique, par contrôle (4 valeurs). Zéro en fonctionnement honnête.</td></tr>
+  <tr><td><code>game_games_active</code></td><td>Jauge</td><td>map</td><td>Parties en cours : une quantité qui monte et descend, lue à chaque scrape depuis la flotte.</td></tr>
+  <tr><td><code>game_games_created_total</code>, <code>game_games_completed_total</code></td><td>Compteurs</td><td>map ; map, outcome, quarantined</td><td>Activité de jeu. 5 cartes, 2 issues, 2 états de quarantaine.</td></tr>
+  <tr><td><code>game_duration_seconds</code></td><td>Histogramme</td><td>map</td><td>Durée des parties. Buckets de 60 à 900 s, avec des bornes à 120 et 200 s pour isoler les parties anormalement courtes.</td></tr>
+  <tr><td><code>game_server_tick_gap_max_milliseconds</code></td><td>Jauge</td><td>aucun</td><td>Pire écart entre deux ticks parmi les parties en cours : santé des serveurs de jeu.</td></tr>
+  <tr><td><code>game_telemetry_build_info</code></td><td>Jauge à 1</td><td>build, version</td><td>Version déployée, à croiser avec les autres séries.</td></tr>
+  <tr><td>Métriques par défaut de prom-client</td><td></td><td></td><td>CPU, mémoire, retard de la boucle d'événements. Ce dernier compte : le traitement d'un rapport est synchrone.</td></tr>
+</table>
+<p><b>Recording rules</b> (<code>observability/prometheus/rules/recording.yml</code>) : débit par route, part des 5xx, p95 par route, rapports par build et cause, part des rapports overlay par build sur 1 h, part des parties de moins de 120 s par carte sur 30 min. Les deux dernières portent les alertes de la partie 4.</p>
+
+<h3>Ce qui relève des métriques, ce qui relève des logs (C3)</h3>
+<table>
+  <tr><th style="width:17%"></th><th style="width:41%">Métriques (Prometheus)</th><th>Logs (Loki)</th></tr>
+  <tr><td>Question type</td><td>Combien, à quelle vitesse, quelle proportion, maintenant et dans le temps.</td><td>Qui exactement, quelle partie, quel rapport, avec quelles valeurs.</td></tr>
+  <tr><td>Dimensions</td><td>Bornées et connues d'avance : route, code, carte, cause, build.</td><td>Non bornées : client, partie, largeur d'écran, navigateur, détail de chaque étape de rendu.</td></tr>
+  <tr><td>Coût</td><td>Fixe : une série par combinaison de labels, quel que soit le trafic.</td><td>Proportionnel au volume : 2 à 3 ko par rapport.</td></tr>
+  <tr><td>Usage ici</td><td>Tableau de bord de santé, alertes sur les taux : régression overlay par build, farming par carte, erreurs, latence.</td><td>Enquête et preuve : population touchée, clients suspects, données historiques, alertes par client.</td></tr>
+</table>
+<p>Exemple concret : la régression se <i>détecte</i> avec une métrique, la part des rapports overlay par build. Elle s'<i>explique</i> avec les logs : c'est en croisant largeur d'écran et bloom, deux champs absents des labels, que la population touchée apparaît. Mettre la largeur d'écran ou le client en label Prometheus multiplierait le nombre de séries par des centaines pour une question posée une fois par incident.</p>
+<p>L'export historique ne peut vivre que dans Loki : Prometheus n'accepte pas d'échantillons vieux de deux semaines, alors que Loki les prend avec leur horodatage d'origine.</p>
+
+<h2 class="pb">4. Détection de comportements (E)</h2>
+<h3>4.1 Typologie des rapports et classification automatique</h3>
+<p>Un rapport décompose le temps d'une image par étape. Pour chaque cause, un champ sort de sa plage normale d'un ordre de grandeur, et aucune valeur n'est observée entre les deux plages : le seuil est placé dans cet intervalle vide. La classification est une suite de règles évaluées dans l'ordre du tableau (<code>src/classify.js</code>).</p>
+<table>
+  <tr><th>Cause</th><th>Signature</th><th class="n">Normal (max)</th><th class="n">Anormal (min)</th><th class="n">Seuil</th><th class="n">Rapports</th><th class="n">Image médiane</th></tr>
+  <tr><td><code>network</code></td><td><code>reason = network</code>, latence aller-retour élevée, file d'attente réseau non nulle</td><td class="n">60 ms</td><td class="n">182 ms</td><td class="n">150 ms</td><td class="n">92</td><td class="n">41 ms</td></tr>
+  <tr><td><code>tab_hidden</code></td><td>activité <code>visibilityHidden</code> : onglet masqué, le navigateur suspend le rendu</td><td class="n">absente</td><td class="n">présente</td><td class="n"></td><td class="n">158</td><td class="n">3 661 ms</td></tr>
+  <tr><td><code>shader_compile</code></td><td><code>firstCapture</code>, dizaines de nouveaux programmes GPU, toujours en phase d'échauffement</td><td class="n">2</td><td class="n">40</td><td class="n">20</td><td class="n">459</td><td class="n">475 ms</td></tr>
+  <tr><td><code>overlay</code></td><td>étape <code>renderOverlay</code></td><td class="n">3 ms</td><td class="n">223 ms</td><td class="n">100 ms</td><td class="n">262</td><td class="n">488 ms</td></tr>
+  <tr><td><code>world</code></td><td>étape <code>worldDynamics</code></td><td class="n">0,4 ms</td><td class="n">70 ms</td><td class="n">30 ms</td><td class="n">20</td><td class="n">168 ms</td></tr>
+  <tr><td><code>render_generic</code></td><td>aucune des signatures : rendu du monde lent, lié à la machine et à la carte</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n">1 119</td><td class="n">99 ms</td></tr>
+</table>
+<p>Les 2 110 rapports uniques sont classés, aucun ne reste <code>unknown</code>. Les tests rejouent 600 rapports synthétiques des six causes, dans les deux schémas : tous retrouvent leur cause.</p>
+<pre>sum by (cause) (count_over_time(E | event="perf_spike" | json cause="cls.cause", dup="cls.duplicate" | dup!="true" [8d]))</pre>
+<p>Les contrôles d'intégrité sont séparés de la cause. Un rapport est suspect s'il contient une durée négative, un fps supérieur à 144 (plafond du client), une image plus courte que son propre temps de travail, ou une étape <code>render</code> différente de la somme de ses détails à plus de 1 ms.</p>
+
+<h3>4.2 Dégradation liée à une version : la saccade overlay</h3>
+<figure><img src="figures/fig1-saccades-par-cause.png" alt=""><figcaption>Figure 1. Les autres causes suivent leur cycle journalier habituel. La cause overlay passe de 9 rapports en quatre jours et demi à 114 le vendredi et 124 le samedi.</figcaption></figure>
+<figure><img src="figures/fig2-overlay-par-build.png" alt=""><figcaption>Figure 2. Sur les écrans d'au moins 2 560 px avec bloom, deux rapports en jeu sur trois sont une saccade overlay depuis le build 0924-3. Sur les autres configurations, le taux ne bouge pas.</figcaption></figure>
+<ul>
+  <li><b>Version.</b> Part des rapports overlay par build : 0,8 % (0919-2), 0,6 % (0922-1), 29 % (0924-3), 35 % (0926-5), 16 % (0926-6, sur 25 rapports seulement).</li>
+  <li><b>Population.</b> 248 des 253 rapports overlay des nouveaux builds viennent d'écrans de 2 560, 3 440 ou 3 840 px avec bloom. 39 clients touchés sur les 40 de ce profil vus sur ces builds. Chrome, Firefox, Safari, Edge et Brave sont tous présents, les cinq cartes aussi (39 à 62 rapports chacune) : ni le navigateur ni la carte n'expliquent la saccade.</li>
+  <li><b>Gravité.</b> L'étape <code>renderOverlay</code> dure 223 à 619 ms (médiane 434 ms), l'image 260 à 691 ms (médiane 490 ms).</li>
+  <li><b>Bruit de fond.</b> 9 rapports overlay existaient avant le build, sur toutes les configurations : environ 2 par jour, sans lien avec la régression.</li>
+</ul>
+<pre>sum by (build) (count_over_time(E | event="perf_spike" | json build="report.build", cause="cls.cause", dup="cls.duplicate" | dup!="true" | cause="overlay" [8d]))
+  / sum by (build) (count_over_time(E | event="perf_spike" | json build="report.build", dup="cls.duplicate" | dup!="true" [8d]))
+sum by (width, bloom) (count_over_time(E | event="perf_spike" | json width="report.graphics.width", bloom="report.graphics.bloom",
+  cause="cls.cause", dup="cls.duplicate" | dup!="true" | cause="overlay" [8d]))</pre>
+
+<h3>4.3 Parties suspectes : farming sur vault</h3>
+<figure><img src="figures/fig3-parties-courtes-vault.png" alt=""><figcaption>Figure 3. La carte vault voit 1 à 2 parties par nuit. Les nuits du 23 et du 25, elle en voit 49 et 40.</figcaption></figure>
+<ul>
+  <li>83 parties vault de 54 à 75 s, toutes gagnées 3-0. Une partie normale dure 5 à 14 minutes et le score 3-0 ne représente que 15 des 155 autres parties vault.</li>
+  <li>Deux épisodes : mercredi 23 de 01 h 14 à 03 h 46 (45 parties, 12 en quarantaine) et vendredi 25 de 00 h 44 à 02 h 32 (38 parties, 5 en quarantaine). Le serveur n'en isole que 17 sur 83, soit 20 %.</li>
+  <li>14 de ces parties ont émis un rapport de saccade. Ces rapports viennent de trois clients seulement : <code>7247704e</code> (7), <code>5db9ad62</code> (5), <code>7440b319</code> (2), présents les deux nuits et jamais vus dans une partie normale.</li>
+</ul>
+<p class="small">Limite : le bloc « Game completed » ne contient pas l'identifiant du client. Les 69 autres parties ne sont rattachées à personne ; les trois clients sont des suspects, pas une liste complète.</p>
+<pre>sum by (map, s0, s1) (count_over_time(E | event="game_completed" | json map="server.map", s0="server.score[0]", s1="server.score[1]",
+  short="cls.short", dup="cls.duplicate" | dup!="true" | short="true" [8d]))   # {map="vault", s0="3", s1="0"} 83</pre>
+
+<h3>4.4 Client suspect et données falsifiées</h3>
+<p>Le client <code>5e1f0c7a</code> envoie 70 rapports du jeudi 24 à 09 h 35 au samedi 26 à 22 h 37. C'est le client le plus bavard de l'export : le suivant en envoie 43, la médiane est de 8.</p>
+<ul>
+  <li>fps annoncés de 240, 360, 999 ou 1 200, alors que le client plafonne à 144.</li>
+  <li>Étape <code>render</code> négative, par exemple −30,6 ms, et image de 50 ms pour 368 ms de travail déclaré.</li>
+  <li>Numéros de séquence de 96 à 8 456, dans le désordre. Les autres clients comptent de 1 en 1.</li>
+  <li>70 parties différentes, dont aucune n'a de « Game completed », avec un <code>createdAt</code> à décimales.</li>
+  <li>Il se déclare en build <code>0924-3</code> dès 09 h 35, neuf heures et demie avant le premier rapport d'un autre client sur ce build (19 h 06) : client modifié, ou accès au build avant sa sortie.</li>
+</ul>
+<p>Ces rapports sont fabriqués et envoyés directement à l'API, qui ne vérifie que le format de l'identifiant. Ils gonflent de 8 % le volume du vendredi (31 sur 413) et sont exclus de toutes les statistiques de performance de ce rapport.</p>
+
+<h3>4.5 Phénomènes récurrents</h3>
+<table>
+  <tr><th style="width:21%">Phénomène</th><th>Observation</th><th style="width:26%">Lecture</th></tr>
+  <tr><td>Ticks serveur dégradés vers 3 h</td><td>Lundi 21 de 02 h 57 à 03 h 27 et mercredi 23 de 03 h 00 à 03 h 19 : l'écart maximal entre ticks passe de 50 à 53 ms à 368 à 860 ms sur 9 parties terminées. 7 des 92 rapports <code>network</code> de la semaine tombent dans ces deux demi-heures.</td><td>Même heure, un jour sur deux : tâche planifiée côté hébergement (sauvegarde, maintenance). À confirmer avec l'hébergeur.</td></tr>
+  <tr><td>Événement sur la carte foundry</td><td>20 rapports <code>world</code>, tous sur foundry : 10 le lundi 21, 10 le jeudi 24, aucun les autres jours. Les 20 parties concernées durent 171 à 282 s, sous le minimum habituel de 300 s.</td><td>Événement de jeu propre à foundry, tous les trois jours, qui charge la physique et écourte la partie.</td></tr>
+  <tr><td>Compilation des shaders</td><td>459 rapports, 22 % du total, toujours en phase d'échauffement, 54 à 83 par jour.</td><td>Coût fixe au premier affichage. Stable : ce n'est pas l'incident, mais c'est le deuxième poste.</td></tr>
+  <tr><td>Cycle journalier</td><td>Creux de 4 h à 6 h (23 à 24 enregistrements par heure sur la semaine), pic de 20 h à 22 h (221 à 249).</td><td>Toute alerte sur un volume doit comparer à la même heure, pas à une moyenne.</td></tr>
+</table>
+
+<h3>4.6 Règles d'alerte</h3>
+<p>Les seuils viennent de l'export, puis chaque règle a été rejouée dessus par pas de 5 minutes. La colonne « Rejouée » donne le résultat.</p>
+<table>
+  <tr><th style="width:19%">Alerte</th><th style="width:31%">Condition</th><th>Justification du seuil</th><th style="width:22%">Rejouée sur l'export</th></tr>
+  <tr><td><code>OverlayRegression­OnBuild</code><br><span class="small">Prometheus</span></td><td>Part des rapports overlay d'un build &gt; 20 % sur 1 h, avec au moins 10 rapports, pendant 15 min</td><td>Référence 0,7 %, incident 29 %. La fenêtre d'une heure et le minimum de 10 évitent un ratio calculé sur 2 ou 3 rapports.</td><td>Jeudi 24 à 20 h 35, 19 min après le premier rapport. Aucun déclenchement sur les anciens builds.</td></tr>
+  <tr><td><code>ShortGamesFarming</code><br><span class="small">Prometheus</span></td><td>Plus de 50 % des parties d'une carte durent moins de 120 s sur 30 min, avec au moins 5 parties, pendant 10 min</td><td>Aucune partie normale sous 171 s ; les parties de farming durent 54 à 75 s.</td><td>Mercredi 23 à 01 h 40 et vendredi 25 à 01 h 10, 26 min après chaque début. Rien d'autre.</td></tr>
+  <tr><td><code>QuarantinedGames</code><br><span class="small">Prometheus</span></td><td>Au moins 3 parties en quarantaine en 30 min</td><td>17 quarantaines en 7 jours, toutes pendant le farming.</td><td>Mercredi 23 à 01 h 50, vendredi 25 à 01 h 25.</td></tr>
+  <tr><td><code>ForgedPerfReports</code><br><span class="small">Prometheus</span></td><td>Au moins un rapport suspect en 10 min</td><td>Aucun client honnête n'en produit : 0 sur 2 040.</td><td>Jeudi 24 à 09 h 35, au premier rapport.</td></tr>
+  <tr><td><code>ClientSendsForged­Reports</code><br><span class="small">ruler Loki</span></td><td>Un même client envoie au moins 3 rapports suspects en 1 h</td><td>Nomme le client, ce qu'une métrique ne peut pas faire. Trois, pour ne pas bannir sur un bug isolé.</td><td>Jeudi 24 à 13 h 15, client <code>5e1f0c7a</code>.</td></tr>
+  <tr><td><code>ServerTickDegraded</code><br><span class="small">Prometheus</span></td><td>Écart maximal entre ticks &gt; 100 ms pendant 2 min</td><td>Normal : au plus 53 ms. Dégradé : au moins 368 ms. 100 ms correspond à deux ticks manqués.</td><td>Couvre les deux épisodes de 3 h (mesure en direct, non rejouable à l'identique).</td></tr>
+  <tr><td><code>OverlaySpikesOn­WideScreens</code><br><span class="small">ruler Loki</span></td><td>Au moins 8 rapports overlay d'écrans larges avec bloom en 1 h, pendant 10 min</td><td>Avant le build : au plus 1 par jour sur ce profil.</td><td>Vendredi 25 à 02 h 25 : plus tardive que la règle par ratio, mais elle désigne la population.</td></tr>
+  <tr><td><code>ClientReportFlood</code><br><span class="small">ruler Loki</span></td><td>Un client envoie plus de 60 rapports en 10 min</td><td>Maximum honnête : 43 rapports en 7 jours.</td><td>Aucun déclenchement.</td></tr>
+  <tr><td>Service : <code>Down</code>, <code>High5xxRatio</code>, <code>IngestSlow</code>, <code>RejectedReports</code></td><td>Scrape en échec 1 min ; 5xx &gt; 2 % ; p95 d'ingestion &gt; 250 ms ; refus &gt; 10 %</td><td>Le service ne produit aucun 5xx en temps normal ; un rapport se traite en 6 ms environ ; le générateur de charge envoie 3 % de corps invalides.</td><td>Sans objet : l'export ne contient pas le trafic HTTP.</td></tr>
+</table>
+
+<h3>Faux positifs et faux négatifs</h3>
+<ul>
+  <li><b>Régression overlay.</b> Faux négatif : un build peu diffusé n'atteint pas 10 rapports par heure. C'est le cas de 0926-6 (25 rapports en trois heures) : la règle par ratio ne l'aurait pas signalé seule, la règle Loki en nombre absolu compense. Faux positif : avec un seuil à 10 %, la règle se déclenche une fois à tort, le mardi 22 à 00 h 25 sur le build 0919-2 ; à 20 % elle ne le fait plus et ne perd que 3 heures d'alerte sur 20.</li>
+  <li><b>Farming.</b> Faux négatif : un tricheur qui laisse durer ses parties plus de 2 minutes, ou qui reste sous 5 parties par demi-heure, passe. Le score, toujours 3-0, serait un second critère. Faux positif : une vague d'abandons en début de partie après une panne ; la quarantaine et le score permettent de trancher.</li>
+  <li><b>Rapports falsifiés.</b> Faux négatif : les quatre contrôles n'attrapent que les falsifications grossières. Un rapport plausible mais inventé passe ; seul un contrôle côté serveur (la partie existe-t-elle, le client y est-il connecté ?) le détecterait. Faux positif : un bug de mesure dans un futur build ferait échouer un contrôle chez tous ses utilisateurs ; l'alerte par client, à 3 rapports, garde alors son sens, et la répartition par build lève le doute.</li>
+  <li><b>Ticks dégradés.</b> La jauge ne voit que les parties en cours au moment du scrape : un épisode de moins de 15 s entre deux scrapes passe inaperçu.</li>
+  <li><b>Règle écartée.</b> « Deux fois plus de rapports qu'hier à la même heure » se déclenche 5 fois sur l'export, dont 3 à tort (lundi 21 à 01 h 40, mercredi 23 à 15 h 50 et 16 h 45), parce que le volume horaire est faible et bruité. Elle n'a pas été retenue.</li>
+</ul>
+
+<h2 class="pb">5. Rapport d'incident (F)</h2>
+<h3>Résumé</h3>
+<p>Du jeudi 24 septembre à 20 h 16 jusqu'à la fin des données (dimanche 27 à 00 h 04), les joueurs équipés d'un écran d'au moins 2 560 px de large avec l'effet bloom subissent des gels d'image d'une demi-seconde en pleine partie. La cause est une régression de l'étape de rendu <code>renderOverlay</code> introduite par le build client <code>beta-20260924-3</code>. Elle est toujours présente dans les builds <code>0926-5</code> et <code>0926-6</code>. L'enquête a aussi mis au jour deux abus sans lien avec la régression : du farming sur la carte vault et un client qui envoie des rapports falsifiés.</p>
+
+<h3>Impact</h3>
+<ul>
+  <li>39 clients touchés, sur 231 clients ayant envoyé au moins un rapport dans la semaine (17 %) et sur 40 du profil concerné présents sur les nouveaux builds (98 %).</li>
+  <li>248 gels signalés en 52 heures : 11 le jeudi soir, 112 le vendredi, 122 le samedi. Les rapports de saccade honnêtes passent de 264 par jour en moyenne (du 20 au 23) à 382 le vendredi.</li>
+  <li>Aucun effet sur les autres joueurs ni sur le service de télémétrie.</li>
+</ul>
+
+<h3>Chronologie (heure de Paris)</h3>
+<figure><img src="figures/fig4-adoption-builds.png" alt=""><figcaption>Figure 4. Le build 0924-3 remplace 0922-1 entre le jeudi soir et le vendredi après-midi. Les saccades overlay suivent exactement cette diffusion.</figcaption></figure>
+<table>
+  <tr><th style="width:21%">Date</th><th>Événement</th></tr>
+  <tr><td>Lun. 21, 02 h 57 à 03 h 27</td><td>Premier épisode de ticks serveur dégradés.</td></tr>
+  <tr><td>Mar. 22, 13 h 59 à 16 h 14</td><td>Trou de collecte : aucun enregistrement pendant 2 h 15.</td></tr>
+  <tr><td>Mer. 23, 01 h 14 à 03 h 46</td><td>Premier épisode de farming sur vault : 45 parties, 12 quarantaines. Second épisode de ticks dégradés de 03 h 00 à 03 h 19.</td></tr>
+  <tr><td>Jeu. 24, 09 h 35</td><td>Premier rapport falsifié du client <code>5e1f0c7a</code>, qui se déclare déjà en build 0924-3.</td></tr>
+  <tr><td>Jeu. 24, 19 h 06</td><td>Premier rapport d'un client honnête sur le build 0924-3 : début de la diffusion.</td></tr>
+  <tr><td><b>Jeu. 24, 20 h 16</b></td><td><b>Premier gel overlay sur le nouveau build. Début de l'incident.</b> L'alerte proposée se serait déclenchée à 20 h 35.</td></tr>
+  <tr><td>Jeu. 24, 18 h à minuit</td><td>41 % des rapports viennent déjà du nouveau build (47 sur 115) ; 11 gels overlay.</td></tr>
+  <tr><td>Ven. 25, 00 h 44 à 02 h 32</td><td>Second épisode de farming : 38 parties, 5 quarantaines.</td></tr>
+  <tr><td>Ven. 25, 14 h 16</td><td>Dernier rapport de l'ancien build 0922-1 : toute la population est exposée. 112 gels dans la journée.</td></tr>
+  <tr><td>Sam. 26, 12 h 32</td><td>Build 0926-5 : la régression persiste (58 rapports en jeu sur 82 pour le profil touché).</td></tr>
+  <tr><td>Sam. 26, 20 h 50</td><td>Build 0926-6, qui change le schéma des rapports (v2) : la régression persiste (4 sur 6).</td></tr>
+  <tr><td>Dim. 27, 00 h 04</td><td>Fin de l'export. Incident toujours en cours.</td></tr>
+</table>
+
+<h3>Cause</h3>
+<p>La décomposition du temps d'image contenue dans chaque rapport désigne une seule étape : <code>renderOverlay</code>, qui prend 223 à 619 ms au lieu de 0,4 à 3 ms. Les autres étapes sont dans leurs plages habituelles. Trois faits établissent que le build est la cause, et non une coïncidence :</p>
+<ol>
+  <li><b>Le build.</b> Sur le profil touché, le taux de rapports overlay est de 1 sur 227 avant le build et de 248 sur 360 après.</li>
+  <li><b>Le témoin.</b> Sur les autres configurations et les mêmes builds, le taux reste celui d'avant : 5 sur 276, contre 8 sur 718.</li>
+  <li><b>La dose.</b> Le nombre de gels suit la part de joueurs passés au nouveau build, heure par heure (figure 4 et figure 1).</li>
+</ol>
+<p>L'export ne contient pas le code. L'hypothèse la plus cohérente avec les données est un traitement de la couche overlay dont le coût dépend de la largeur du tampon de rendu et qui n'est exécuté qu'avec le bloom : il faut les deux conditions réunies, et le seuil se situe entre 1 920 et 2 560 px. À vérifier dans le différentiel entre <code>0922-1</code> et <code>0924-3</code>.</p>
+<p><b>Ce que l'incident n'est pas.</b> Ce n'est pas le réseau : la cause <code>network</code> reste à 10 à 18 rapports par jour. Ce n'est pas un navigateur, ni une carte, ni une carte graphique : tous sont représentés. Ce ne sont pas les rapports falsifiés : aucun n'est de cause overlay.</p>
+
+<h3>Preuves</h3>
+<p>Les requêtes de la section 4.2 donnent le taux par build et la répartition par largeur et bloom. Le tableau de bord « 2. Performance côté joueur » les rejoue sur la semaine du 20 au 26 septembre ; le tableau de bord « 3. Activité de jeu et intégrité des parties » montre le farming et le client falsificateur. Population touchée et premier gel :</p>
+<pre>count(sum by (client) (count_over_time(E | event="perf_spike" | json client="cls.client", cause="cls.cause", wide="cls.wideBloom"
+  | cause="overlay" | wide="true" [8d])))
+E | event="perf_spike" | json | cls_cause="overlay" | report_build="beta-20260924-3"
+  | line_format "{{.cls_client}} image={{.report_frameMs}}ms overlay={{.report_work_details_renderOverlay}}ms {{.report_graphics_width}}px"</pre>
+
+<h3>Actions correctives</h3>
+<table>
+  <tr><th style="width:5%">#</th><th>Action</th><th style="width:22%">Répond à</th></tr>
+  <tr><td>1</td><td>Corriger <code>renderOverlay</code> ou, en attendant, désactiver l'overlay ou le bloom par configuration distante pour les affichages d'au moins 2 560 px. Revenir à <code>0922-1</code> n'est possible que si le serveur accepte encore le schéma v1.</td><td>Saccades</td></tr>
+  <tr><td>2</td><td>Valider le correctif sur les trois largeurs touchées (2 560, 3 440, 3 840 px) avec bloom, puis suivre le taux overlay du nouveau build : il doit revenir sous 2 %.</td><td>Saccades</td></tr>
+  <tr><td>3</td><td>Bloquer le client <code>5e1f0c7a</code> et vérifier comment il a connu l'identifiant du build 0924-3 avant sa diffusion.</td><td>Rapports falsifiés</td></tr>
+  <tr><td>4</td><td>Examiner les comptes derrière les clients <code>7247704e</code>, <code>5db9ad62</code> et <code>7440b319</code> et annuler les gains des 83 parties.</td><td>Farming</td></tr>
+</table>
+
+<h3>Actions préventives</h3>
+<table>
+  <tr><th style="width:5%">#</th><th>Action</th><th style="width:22%">Répond à</th></tr>
+  <tr><td>5</td><td>Diffusion progressive des builds, avec l'alerte <code>OverlayRegressionOnBuild</code> comme critère d'arrêt : elle aurait signalé le problème 19 minutes après le premier gel, quand 41 % des joueurs seulement étaient exposés.</td><td>Détection tardive</td></tr>
+  <tr><td>6</td><td>Ajouter un écran large avec bloom à la matrice de tests de performance avant diffusion.</td><td>Régression non vue</td></tr>
+  <tr><td>7</td><td>Valider les rapports à l'ingestion : refuser ceux qui violent un invariant, vérifier que la partie existe, limiter le débit par client.</td><td>Rapports falsifiés</td></tr>
+  <tr><td>8</td><td>Journaliser l'identifiant du client dans <code>game_completed</code> : aujourd'hui 69 des 83 parties de farming ne sont rattachées à personne.</td><td>Farming</td></tr>
+  <tr><td>9</td><td>Durée minimale de partie pour compter une victoire ; mise en quarantaine sur le motif « moins de 2 minutes et 3-0 » plutôt que les 20 % actuels.</td><td>Farming</td></tr>
+  <tr><td>10</td><td>Identifier la tâche de 3 h qui dégrade les ticks et la déplacer ou la brider.</td><td>Ticks dégradés</td></tr>
+  <tr><td>11</td><td>Alerter sur l'absence de logs : une heure sans aucun événement en journée (le trou du mardi 22 est passé inaperçu).</td><td>Trou de collecte</td></tr>
+  <tr><td>12</td><td>Exporter depuis la console en JSON lines horodaté en UTC, sans doublon.</td><td>Qualité des données</td></tr>
+</table>
+
+<h3>Limites de l'analyse</h3>
+<ul>
+  <li>Les rapports ne sont émis que lorsqu'une image dépasse le seuil du client. On connaît les joueurs qui saccadent, pas le nombre total de joueurs : les proportions sont calculées sur les clients ayant envoyé au moins un rapport.</li>
+  <li>L'export s'arrête le 27 à 00 h 04 et le build 0926-6 n'a que 25 rapports : son taux de 16 % est indicatif.</li>
+  <li>Les tableaux de bord et les règles d'alerte ont été validés par requête sur Loki et Prometheus ; la simulation en direct tourne en accéléré (10 fois), ce qui raccourcit les durées observées en direct mais pas celles de l'export.</li>
+</ul>
+
+</body>
+</html>
