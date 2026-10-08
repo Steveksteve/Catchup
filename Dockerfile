@@ -17,7 +17,7 @@ COPY tools ./tools
 RUN mkdir -p /app/logs
 
 # ---- 3. execution : distroless (ni shell, ni npm, ni gestionnaire de paquets) --
-FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
+FROM gcr.io/distroless/nodejs22-debian13:nonroot AS runtime
 ARG BUILD=dev
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="game-telemetry" \
